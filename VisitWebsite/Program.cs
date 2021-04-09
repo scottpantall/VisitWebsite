@@ -6,6 +6,8 @@ using RestSharp;
 
 public class Program
 {
+	public static string userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Safari/537.36";
+
 	public static async Task Main(string[] args)
 	{
 		if (args.Length == 0)
@@ -52,7 +54,7 @@ public class Program
 
 			var request = WebRequest.Create(uri) as HttpWebRequest;
 			request.Method = "GET";
-			request.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2883.87 Safari/537.36";
+			request.UserAgent = userAgent;
 			request.Headers.Add("Upgrade-Insecure-Requests", "1");
 			request.Accept = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8";
 			request.AllowAutoRedirect = true;
@@ -72,13 +74,26 @@ public class Program
 	{
 		Uri.TryCreate(website, UriKind.Absolute, out var uri);
 
-		var httpClient = new HttpClient();
+        using var httpClientHandler = new HttpClientHandler
+        {
+            ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+        };
 
-		var request = new HttpRequestMessage(HttpMethod.Get, website);
-		request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2883.87 Safari/537.36");
+        var httpClient = new HttpClient(httpClientHandler);
+
+		var request = new HttpRequestMessage(HttpMethod.Get, uri);
 		//https://stackoverflow.com/a/61843229/3447523
+		request.Headers.Add("User-Agent", userAgent);
+        
+        var response = await httpClient.SendAsync(request);
 
-		var response = await httpClient.SendAsync(request);
+		//https://github.com/dotnet/runtime/issues/23801
+		if (response.StatusCode == HttpStatusCode.MovedPermanently)
+        {
+			var redirectRequest = new HttpRequestMessage(HttpMethod.Get, response.Headers.Location);
+			redirectRequest.Headers.Add("User-Agent", userAgent);
+			response = await httpClient.SendAsync(redirectRequest);
+        }
 
 		Console.WriteLine($"{response.StatusCode}: {response.ReasonPhrase}");
 		Console.WriteLine(response.IsSuccessStatusCode);
